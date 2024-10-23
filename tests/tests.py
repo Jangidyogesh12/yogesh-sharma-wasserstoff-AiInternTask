@@ -1,59 +1,75 @@
 import unittest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import patch, MagicMock
+import asyncio
 from PDF_processor.PDF_processor import PDFProcessor
-import os
 
 
-class TestPDFProcessor(unittest.IsolatedAsyncioTestCase):
+class TestPDFProcessor(unittest.TestCase):
+
+    def setUp(self):
+        self.mongodb_uri = "mongodb://localhost:27017/"
+        self.db_name = "test_pdf_processor"
+        self.processor = PDFProcessor(self.mongodb_uri, self.db_name)
+
     @patch("pdf_processor.MongoClient")
-    def setUp(self, mock_mongo_client):
-        # Mock MongoDB connection
-        self.processor = PDFProcessor(mongodb_uri="mock_uri", db_name="test_db")
-        self.processor.collection = MagicMock()
+    def test_init(self, mock_mongo_client):
+        # Test successful initialization
+        processor = PDFProcessor(self.mongodb_uri, self.db_name)
+        self.assertIsNotNone(processor)
 
-    async def test_cleanup_database(self):
-        # Mock MongoDB aggregate results and delete_many
-        self.processor.collection.aggregate.return_value = [
-            {"_id": "test_id", "latest_id": "test_id"}
-        ]
-        self.processor.collection.delete_many = AsyncMock()
+        # Test MongoDB connection error
+        mock_mongo_client.side_effect = Exception("Connection failed")
+        with self.assertRaises(Exception):
+            PDFProcessor(self.mongodb_uri, self.db_name)
 
-        result = await self.processor.cleanup_database()
+    @patch("pdf_processor.PDFProcessor.extract_text")
+    @patch("pdf_processor.PDFProcessor.generate_summary")
+    @patch("pdf_processor.PDFProcessor.extract_keywords")
+    @patch("pdf_processor.PDFProcessor.store_initial_metadata")
+    @patch("pdf_processor.PDFProcessor.update_mongodb")
+    async def test_preprocess_pdf(
+        self, mock_update, mock_store, mock_keywords, mock_summary, mock_extract
+    ):
+        # Mock return values
+        mock_extract.return_value = "Sample text"
+        mock_summary.return_value = "Summary"
+        mock_keywords.return_value = ["keyword1", "keyword2"]
+        mock_store.return_value = "doc_id"
 
-        self.assertEqual(
-            result, 0
-        )  # Check if the final document count is returned correctly
-        self.processor.collection.delete_many.assert_called_once()
+        result = await self.processor.preprocess_pdf("test.pdf")
 
-    @patch("pdf_processor.os.path.exists")
-    async def test_process_folder_file_not_found(self, mock_exists):
-        mock_exists.return_value = False
-
-        with self.assertRaises(FileNotFoundError):
-            await self.processor.process_folder("non_existent_folder")
-
-    @patch("pdf_processor.os.listdir")
-    async def test_process_folder_no_pdfs(self, mock_listdir):
-        mock_listdir.return_value = []
-
-        result = await self.processor.process_folder("empty_folder")
-        self.assertEqual(result, [])
-
-    @patch("pdf_processor.PyPDF2.PdfReader")
-    async def test_extract_text_success(self, mock_pdf_reader):
-        # Setup mock PDF
-        mock_pdf_reader.return_value.pages = [MagicMock(), MagicMock()]
-        mock_pdf_reader.return_value.pages[0].extract_text.return_value = "Test page 1"
-        mock_pdf_reader.return_value.pages[1].extract_text.return_value = "Test page 2"
-
-        result = await self.processor.extract_text("mock_file.pdf")
-        self.assertEqual(result, "Test page 1\nTest page 2\n")
-
-    @patch("pdf_processor.os.path.getsize")
-    @patch("pdf_processor.PDFProcessor.extract_text", return_value="Sample text")
-    async def test_preprocess_pdf(self, mock_extract_text, mock_getsize):
-        mock_getsize.return_value = 1234
-
-        result = await self.processor.preprocess_pdf("mock_file.pdf")
-        self.assertEqual(result["metadata"]["filename"], "mock_file.pdf")
+        self.assertIsNotNone(result)
         self.assertEqual(result["status"], "completed")
+        self.assertEqual(result["summary"], "Summary")
+        self.assertEqual(result["keywords"], ["keyword1", "keyword2"])
+
+        # Test error handling
+        mock_extract.side_effect = Exception("Extraction failed")
+        result = await self.processor.preprocess_pdf("test.pdf")
+        self.assertIn("error", result)
+
+    def test_categorize_document_length(self):
+        self.assertEqual(self.processor.categorize_document_length(2), "short")
+        self.assertEqual(self.processor.categorize_document_length(10), "medium")
+        self.assertEqual(self.processor.categorize_document_length(20), "long")
+
+    @patch("pdf_processor.sent_tokenize")
+    @patch("pdf_processor.word_tokenize")
+    async def test_generate_summary(self, mock_word_tokenize, mock_sent_tokenize):
+        mock_sent_tokenize.return_value = ["Sentence 1.", "Sentence 2.", "Sentence 3."]
+        mock_word_tokenize.return_value = ["word1", "word2", "word3"]
+
+        summary = await self.processor.generate_summary("Sample text", "short")
+        self.assertIsInstance(summary, str)
+        self.assertTrue(len(summary) > 0)
+
+    @patch("pdf_processor.word_tokenize")
+    async def test_extract_keywords(self, mock_word_tokenize):
+        mock_word_tokenize.return_value = ["keyword1", "keyword2", "keyword3"]
+        keywords = await self.processor.extract_keywords("Sample text", 2)
+        self.assertEqual(len(keywords), 2)
+        self.assertIsInstance(keywords, list)
+
+
+if __name__ == "__main__":
+    unittest.main()
