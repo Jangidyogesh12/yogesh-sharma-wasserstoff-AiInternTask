@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import patch, MagicMock
-import asyncio
+from unittest.mock import patch
+
 import sys
 import os
 
@@ -57,7 +57,7 @@ async def test_preprocess_pdf(
     # Test error handling
     mock_extract.side_effect = Exception("Extraction failed")
     result = await pdf_processor.preprocess_pdf("test.pdf")
-    assert "error" in result
+    assert result["error"] == "Extraction failed"
 
 
 def test_categorize_document_length(pdf_processor):
