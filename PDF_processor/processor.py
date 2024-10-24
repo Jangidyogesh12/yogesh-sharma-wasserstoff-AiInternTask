@@ -4,7 +4,9 @@ import asyncio
 from datetime import datetime
 import time
 import tracemalloc
-import PyPDF2
+
+# import PyPDF2
+import pypdf
 from loguru import logger
 from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +15,7 @@ import nltk
 from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from pymongo import MongoClient, errors as mongo_errors
+import pypdf.errors
 
 
 class PDFProcessor:
@@ -115,7 +118,7 @@ class PDFProcessor:
                     text = ""
                     with open(file_path, "rb") as file:
                         try:
-                            pdf = PyPDF2.PdfReader(file)
+                            pdf = pypdf.PdfReader(file)
                             # Get total number of pages
                             total_pages = len(pdf.pages)
                             # Limit to first 20 pages if total pages exceed 20
@@ -128,7 +131,7 @@ class PDFProcessor:
                                     logger.warning(
                                         f"Error extracting text from page {page_num} in {file_path}: {str(e)}"
                                     )
-                        except PyPDF2.PdfReadError as e:
+                        except pypdf.errors.PdfReadError as e:
                             logger.error(f"Failed to read PDF {file_path}: {str(e)}")
                             raise
                     return text.strip()
@@ -177,7 +180,7 @@ class PDFProcessor:
 
             # Get document length
             with open(file_path, "rb") as file:
-                pdf = PyPDF2.PdfReader(file)
+                pdf = pypdf.PdfReader(file)
                 num_pages = len(pdf.pages)
 
             doc_length = self.categorize_document_length(num_pages)

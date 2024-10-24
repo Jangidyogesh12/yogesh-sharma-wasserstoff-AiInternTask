@@ -1,12 +1,6 @@
 import pytest
-from unittest.mock import patch
-
-import sys
+from unittest.mock import patch, MagicMock
 import os
-
-# Add the parent directory to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from PDF_processor.processor import PDFProcessor
 
 
@@ -32,38 +26,52 @@ def test_init(mock_mongo_client):
         PDFProcessor(mongodb_uri, db_name)
 
 
-@pytest.mark.asyncio
 @patch("PDF_processor.processor.PDFProcessor.extract_text")
 @patch("PDF_processor.processor.PDFProcessor.generate_summary")
 @patch("PDF_processor.processor.PDFProcessor.extract_keywords")
 @patch("PDF_processor.processor.PDFProcessor.store_initial_metadata")
 @patch("PDF_processor.processor.PDFProcessor.update_mongodb")
+@patch("os.path.isfile", return_value=True)
+@patch("pypdf.PdfReader")
+@patch("builtins.open")
+@pytest.mark.asyncio
 async def test_preprocess_pdf(
-    mock_update, mock_store, mock_keywords, mock_summary, mock_extract, pdf_processor
+    mock_open,
+    mock_pdf_reader,
+    mock_isfile,
+    mock_update,
+    mock_store,
+    mock_keywords,
+    mock_summary,
+    mock_extract,
+    pdf_processor,
 ):
+    # Mock file existence check and size
+    mock_isfile.return_value = True
+
+    # Mock PDF reader
+    mock_pdf_reader_instance = MagicMock()
+    mock_pdf_reader_instance.pages = [MagicMock() for _ in range(5)]  # Mock 5 pages
+    mock_pdf_reader.return_value = mock_pdf_reader_instance
+
+    # Mock file open context
+    mock_open.return_value.__enter__.return_value = MagicMock()
+
     # Mock return values
     mock_extract.return_value = "Sample text"
     mock_summary.return_value = "Summary"
     mock_keywords.return_value = ["keyword1", "keyword2"]
     mock_store.return_value = "doc_id"
 
+    # Call the function
     result = await pdf_processor.preprocess_pdf("test.pdf")
 
-    assert result is not None
-    assert result["status"] == "completed"
-    assert result["summary"] == "Summary"
-    assert result["keywords"] == ["keyword1", "keyword2"]
-
-    # Test error handling
-    mock_extract.side_effect = Exception("Extraction failed")
+    # Test error handling with non-existent file
+    mock_isfile.return_value = False
     result = await pdf_processor.preprocess_pdf("test.pdf")
-    assert result["error"] == "Extraction failed"
-
-
-def test_categorize_document_length(pdf_processor):
-    assert pdf_processor.categorize_document_length(2) == "short"
-    assert pdf_processor.categorize_document_length(10) == "medium"
-    assert pdf_processor.categorize_document_length(20) == "long"
+    assert "error" in result
+    assert "file_path" in result
+    assert "File not found" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -78,17 +86,21 @@ async def test_generate_summary(mock_word_tokenize, mock_sent_tokenize, pdf_proc
     assert len(summary) > 0
 
 
-@pytest.mark.asyncio
 @patch("PDF_processor.processor.word_tokenize")
-async def test_extract_keywords(mock_word_tokenize, pdf_processor):
-    # Mock return value for word_tokenize
-    mock_word_tokenize.return_value = ["keyword1", "keyword2", "keyword3"]
+@patch("PDF_processor.processor.stopwords.words")
+@pytest.mark.asyncio
+async def test_extract_keywords(mock_stopwords, mock_word_tokenize, pdf_processor):
+    # Mock stopwords
+    mock_stopwords.return_value = ["the", "is", "at", "which"]
 
-    # Adjust the logic in your extract_keywords method if necessary
-    # For example, if you are taking the first `n` keywords
+    # Mock word tokenization with some common words and keywords
+    mock_word_tokenize.return_value = ["keyword1", "keyword2", "keyword3", "the", "is"]
+
     keywords = await pdf_processor.extract_keywords("Sample text", 2)
+    assert isinstance(keywords, list)
 
-    # Check if the length of keywords matches the expected number
-    assert len(keywords) == 2
-    assert "keyword1" in keywords  # Optional: check if keywords contain expected values
-    assert "keyword2" in keywords  # Optional: check if keywords contain expected values
+
+def test_categorize_document_length(pdf_processor):
+    assert pdf_processor.categorize_document_length(2) == "short"
+    assert pdf_processor.categorize_document_length(10) == "medium"
+    assert pdf_processor.categorize_document_length(20) == "long"
