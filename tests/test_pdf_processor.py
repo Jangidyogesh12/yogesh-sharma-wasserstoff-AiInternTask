@@ -81,7 +81,14 @@ async def test_generate_summary(mock_word_tokenize, mock_sent_tokenize, pdf_proc
 @pytest.mark.asyncio
 @patch("PDF_processor.processor.word_tokenize")
 async def test_extract_keywords(mock_word_tokenize, pdf_processor):
+    # Mock return value for word_tokenize
     mock_word_tokenize.return_value = ["keyword1", "keyword2", "keyword3"]
+
+    # Adjust the logic in your extract_keywords method if necessary
+    # For example, if you are taking the first `n` keywords
     keywords = await pdf_processor.extract_keywords("Sample text", 2)
+
+    # Check if the length of keywords matches the expected number
     assert len(keywords) == 2
-    assert isinstance(keywords, list)
+    assert "keyword1" in keywords  # Optional: check if keywords contain expected values
+    assert "keyword2" in keywords  # Optional: check if keywords contain expected values

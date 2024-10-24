@@ -142,6 +142,12 @@ class PDFProcessor:
         """Extract text from the PDF and return the basic metadata."""
         doc_id = None
         try:
+            # check if file Exist
+            if not os.path.isfile(file_path):
+                error_msg = f"File not found: {file_path}"
+                logger.error(error_msg)
+                return {"error": error_msg, "file_path": file_path}
+
             metadata = {
                 "filename": os.path.basename(file_path),
                 "file_path": file_path,
