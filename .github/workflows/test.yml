@@ -13,6 +13,12 @@ jobs:
       matrix:
         python-version: [3.8, 3.9, "3.10"]
 
+    services:
+      mongodb:
+        image: mongo
+        ports:
+          - 27017:27017
+
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python ${{ matrix.python-version }}
@@ -26,6 +32,12 @@ jobs:
       - name: Download NLTK data
         run: |
           python -c "import nltk; nltk.download('punkt'); nltk.download('stopwords'); nltk.download('averaged_perceptron_tagger')"
+      - name: Create Data directory and add sample PDF
+        run: |
+          mkdir Data
+          echo "%PDF-1.7" > Data/sample.pdf
       - name: Run tests
         run: |
-          pytest tests/
+          pytest tests/ -v
+        env:
+          MONGODB_URI: mongodb://localhost:27017/
