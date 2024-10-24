@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime
 import time
 import tracemalloc
-import ssl
 import pypdf
 from loguru import logger
 from typing import Dict, List, Optional
@@ -15,6 +14,10 @@ from nltk.tokenize import sent_tokenize, word_tokenize
 from nltk.corpus import stopwords
 from pymongo import MongoClient, errors as mongo_errors
 import pypdf.errors
+
+nltk.download("punkt_tab")
+nltk.download("stopwords")
+nltk.download("averaged_perceptron_tagger")
 
 
 class PDFProcessor:
@@ -31,29 +34,6 @@ class PDFProcessor:
             # Test connection
             self.client.server_info()
 
-            # Download required NLTK data with error handling
-            nltk_resources = ["punkt", "stopwords", "averaged_perceptron_tagger"]
-            for resource in nltk_resources:
-                try:
-                    nltk.download(resource, quiet=True)
-                except Exception as e:
-                    logger.error(
-                        f"Failed to download NLTK resource {resource}: {str(e)}"
-                    )
-                    raise
-            try:
-                _create_unverified_https_context = ssl._create_unverified_context
-
-            except AttributeError:
-                pass
-            else:
-                ssl._create_default_https_context = _create_unverified_https_context
-
-            nltk.download("punkt")
-            nltk.download("averaged_perceptron_tagger")
-            nltk.download("stopwords")
-
-        # Catch MongoDB connection errors correctly
         except mongo_errors.ServerSelectionTimeoutError as e:
             logger.error(f"Failed to connect to MongoDB: {str(e)}")
             raise
@@ -242,7 +222,7 @@ class PDFProcessor:
                 score = 0
                 for word, freq in word_freq.items():
                     if word.isalpha():  # Only consider alphabetic words
-                        tf = freq / len(words)
+                        tf = freq / (len(words) + 1)
                         idf = math.log(len(sentences) / (self.dft(word, sentences) + 1))
                         score += tf * idf
 
