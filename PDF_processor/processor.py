@@ -4,8 +4,7 @@ import asyncio
 from datetime import datetime
 import time
 import tracemalloc
-
-# import PyPDF2
+import ssl
 import pypdf
 from loguru import logger
 from typing import Dict, List, Optional
@@ -42,6 +41,17 @@ class PDFProcessor:
                         f"Failed to download NLTK resource {resource}: {str(e)}"
                     )
                     raise
+            try:
+                _create_unverified_https_context = ssl._create_unverified_context
+
+            except AttributeError:
+                pass
+            else:
+                ssl._create_default_https_context = _create_unverified_https_context
+
+            nltk.download("punkt")
+            nltk.download("averaged_perceptron_tagger")
+            nltk.download("stopwords")
 
         # Catch MongoDB connection errors correctly
         except mongo_errors.ServerSelectionTimeoutError as e:
