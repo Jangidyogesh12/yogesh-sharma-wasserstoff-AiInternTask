@@ -2,6 +2,66 @@ import pytest
 from unittest.mock import patch, MagicMock
 import os
 from PDF_processor.processor import PDFProcessor
+import pytest
+from unittest.mock import patch, MagicMock
+from pymongo.database import Database
+from PDF_processor.processor import PDFProcessor
+
+
+@pytest.fixture
+def mock_db():
+    mock_db = MagicMock(spec=Database)
+    mock_collection = MagicMock()
+    mock_db.documents = mock_collection
+    return mock_db
+
+
+@pytest.fixture
+def pdf_processor(mock_db):
+    return PDFProcessor("mongodb://localhost:27017/", "test_pdf_processor", db=mock_db)
+
+
+def test_init(mock_db):
+    processor = PDFProcessor(
+        "mongodb://localhost:27017/", "test_pdf_processor", db=mock_db
+    )
+    assert isinstance(processor, PDFProcessor)
+
+
+@pytest.mark.asyncio
+async def test_preprocess_pdf(pdf_processor, mock_db):
+    # Mock the necessary methods
+    pdf_processor.extract_text = MagicMock(return_value="Sample text")
+    pdf_processor.generate_summary = MagicMock(return_value="Summary")
+    pdf_processor.extract_keywords = MagicMock(return_value=["keyword1", "keyword2"])
+    mock_db.documents.update_one = MagicMock()
+
+    result = await pdf_processor.preprocess_pdf("test.pdf")
+
+    assert result is not None
+    assert result["status"] == "completed"
+    assert result["summary"] == "Summary"
+    assert result["keywords"] == ["keyword1", "keyword2"]
+
+
+@pytest.mark.asyncio
+async def test_generate_summary(pdf_processor):
+    summary = await pdf_processor.generate_summary("Sample text", "short")
+    assert isinstance(summary, str)
+    assert len(summary) > 0
+
+
+@pytest.mark.asyncio
+async def test_extract_keywords(pdf_processor):
+    keywords = await pdf_processor.extract_keywords("Sample text", 2)
+    assert isinstance(keywords, list)
+    assert len(keywords) == 2
+
+
+def test_categorize_document_length(pdf_processor):
+    assert pdf_processor.categorize_document_length(2) == "short"
+    assert pdf_processor.categorize_document_length(10) == "medium"
+    assert pdf_processor.categorize_document_length(20) == "long"
 
 
 @pytest.fixture
